@@ -96,6 +96,12 @@ int main(void)
 	char hum[50];
 
 	// Magnetic Field Sensor
+	uint8_t set[2] = {0x1B, 0x08};
+	uint8_t cont[2] = {0x1A, 0x1C};
+	uint8_t status = 0x18;
+	uint8_t Cmm_freq_en[2] = {0x1B, 0x80};
+	uint8_t Cmm_en[2] = {0x1D, 0x10};
+
 	uint8_t pos[9];
 	uint32_t raw_xvec;
 	uint32_t raw_yvec;
@@ -103,6 +109,9 @@ int main(void)
 	double xvec;
 	double yvec;
 	double zvec;
+
+	uint8_t ctrl_0 = 0x1B;
+	uint8_t res;
 
   /* USER CODE END 1 */
 
@@ -127,6 +136,33 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
   ssd1306_Init();
+  ret = HAL_I2C_Master_Transmit(&hi2c1, MMC_ADDR, set, 2, HAL_MAX_DELAY);
+    if (ret != HAL_OK) {
+  	  printf("Error setting mmc\n");
+    } else {
+  	  printf("mmc set\n");
+  	  HAL_Delay(10);
+  	  ret = HAL_I2C_Master_Transmit(&hi2c1, MMC_ADDR, cont, 2, HAL_MAX_DELAY);
+  	  if ( ret != HAL_OK ) {
+  		  printf("Error setting continuous mode\n");
+  	  } else {
+  		  printf("Continuous mode set\n");
+  		  ret = HAL_I2C_Master_Transmit(&hi2c1, MMC_ADDR, Cmm_freq_en, 2, HAL_MAX_DELAY);
+  		  if ( ret != HAL_OK ) {
+  			  printf("Error setting Cmm_freq_en\n");
+  		  } else {
+  			  printf("CMM_freq_en set\n");
+  			  ret = HAL_I2C_Master_Transmit(&hi2c1, MMC_ADDR, Cmm_en, 2, HAL_MAX_DELAY);
+  			  if ( ret != HAL_OK ) {
+  				  printf("Error setting Cmm_en\n");
+  			  } else {
+  				  printf("Cmm_en set\n");
+  			  }
+  		  }
+  	  }
+    }
+
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -134,15 +170,17 @@ int main(void)
   while (1)
   {
 
+
+	  HAL_Delay(100);
 	  buf[0] = REG_TEMP1;
 	  buf[1] = REG_TEMP2;
 	  ret = HAL_I2C_Master_Transmit(&hi2c1, SHT30_ADDR, buf, 2, HAL_MAX_DELAY);
 	  if (ret != HAL_OK ) {
-		  printf("Error Sending Temperature\n");
+//		  printf("Error Sending Temperature\n");
 	  } else {
 		  ret = HAL_I2C_Master_Receive(&hi2c1, SHT30_ADDR, buf, 6, HAL_MAX_DELAY);
 		  if (ret != HAL_OK ) {
-			  printf("Error Receiving Temperature\n");
+//			  printf("Error Receiving Temperature\n");
 		  } else {
 			  raw_temp = ((uint16_t)buf[0] << 8) | buf[1];
 			  raw_hum = ((uint16_t)buf[3] << 8) | (uint16_t)buf[4];
@@ -150,45 +188,60 @@ int main(void)
 			  humidity = 100 * (float)raw_hum/65535;
 			  sprintf(temp, "Temperature: %.2f F\n", temperature);
 			  sprintf(hum, "Humidity: %.2f %%\n", humidity);
-			  printf(temp);
-			  printf(hum);
+//			  printf(temp);
+//			  printf(hum);
 
 			  ssd1306_SetCursor(5, 5);
 			  ssd1306_WriteString(temp, Font_7x10, White);
 			  ssd1306_SetCursor(5, 20);
 			  ssd1306_WriteString(hum, Font_7x10, White);
 			  ssd1306_UpdateScreen();
-		  }
-	 ret = HAL_I2C_Master_Transmit(&hi2c1, MMC_ADDR, &reg, 1, HAL_MAX_DELAY);
-	 if (ret != HAL_OK) {
-		 printf("Error Sending Magnet\n");
-	 } else {
-		 ret = HAL_I2C_Master_Receive(&hi2c1, MMC_ADDR, pos, 9, HAL_MAX_DELAY);
-		 if (ret != HAL_OK) {
-			 printf("Error Receiving Magnet\n");
-		 } else {
-
-			 raw_xvec = ((uint32_t)pos[0] << 12) | ((uint32_t)pos[1] << 4) | (((uint32_t)pos[6] >> 4) & 0x0F);
-			 raw_yvec = ((uint32_t)pos[2] << 12) | ((uint32_t)pos[3] << 4) | (((uint32_t)pos[7] >> 4) & 0x0F);
-			 raw_zvec = ((uint32_t)pos[4] << 12) | ((uint32_t)pos[5] << 4) | (((uint32_t)pos[8] >> 4) & 0x0F);
-
-			 xvec = (double)convert_to_20bit_integer(raw_xvec);
-			 yvec = (double)convert_to_20bit_integer(raw_yvec);
-			 zvec = (double)convert_to_20bit_integer(raw_zvec);
-
-			 printf("X: %.2f\n", xvec);
-			 printf("Y: %.2f\n", yvec);
-			 printf("Z: %.2f\n", zvec);
-
+		  	  }
 		 }
-	 }
-    /* USER CODE END WHILE */
+
+
+	  ret = HAL_I2C_Master_Receive(&hi2c1, MMC_ADDR, &status, 1, HAL_MAX_DELAY);
+	  if ( ret != HAL_OK ){
+		  printf("Error reading status\n");
+	  } else {
+	  if ( (status & 0x40) == 0x40 ) {
+		  printf("Data is ready!\n");
+		 ret = HAL_I2C_Master_Transmit(&hi2c1, MMC_ADDR, &reg, 1, HAL_MAX_DELAY);
+		 if (ret != HAL_OK) {
+			 printf("Error Sending Magnet\n");
+		 } else {
+			 ret = HAL_I2C_Master_Receive(&hi2c1, MMC_ADDR, pos, 9, HAL_MAX_DELAY);
+			 if (ret != HAL_OK) {
+				 printf("Error Receiving Magnet\n");
+			 } else {
+
+				 raw_xvec = ((uint32_t)pos[0] << 12) | ((uint32_t)pos[1] << 4) | (((uint32_t)pos[6] >> 4) & 0x0F);
+				 raw_yvec = ((uint32_t)pos[2] << 12) | ((uint32_t)pos[3] << 4) | (((uint32_t)pos[7] >> 4) & 0x0F);
+				 raw_zvec = ((uint32_t)pos[4] << 12) | ((uint32_t)pos[5] << 4) | (((uint32_t)pos[8] >> 4) & 0x0F);
+
+				 xvec = (double)convert_to_20bit_integer(raw_xvec);
+				 yvec = (double)convert_to_20bit_integer(raw_yvec);
+				 zvec = (double)convert_to_20bit_integer(raw_zvec);
+
+				 printf("X: %.2f\n", xvec);
+				 printf("Y: %.2f\n", yvec);
+				 printf("Z: %.2f\n", zvec);
+		  }
+
+			}
+		  }
 	  }
 
-    /* USER CODE BEGIN 3 */
   }
-  /* USER CODE END 3 */
 }
+
+    /* USER CODE END WHILE */
+
+
+    /* USER CODE BEGIN 3 */
+
+  /* USER CODE END 3 */
+
 
 /**
   * @brief System Clock Configuration
